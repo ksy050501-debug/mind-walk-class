@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function teacherForClass(classNo) {
+      return signedIn() && (
+        (classNo == 1 && request.auth.token.email == 'teacher-class1@mindwalk.school') ||
+        (classNo == 2 && request.auth.token.email == 'teacher-class2@mindwalk.school') ||
+        (classNo == 3 && request.auth.token.email == 'teacher-class3@mindwalk.school')
+      );
+    }
+
+    match /students/{studentUid} {
+      allow create: if signedIn()
+                    && request.auth.uid == studentUid
+                    && request.resource.data.ownerUid == studentUid
+                    && request.resource.data.grade == 6
+                    && request.resource.data.classNo in [1, 2, 3]
+                    && request.resource.data.studentNo >= 1
+                    && request.resource.data.studentNo <= 22;
+
+      allow read: if signedIn() && (
+        request.auth.uid == studentUid || teacherForClass(resource.data.classNo)
+      );
+
+      allow update: if signedIn() && (
+        (request.auth.uid == studentUid
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.classNo == resource.data.classNo
+          && request.resource.data.studentNo == resource.data.studentNo) ||
+        teacherForClass(resource.data.classNo)
+      );
+
+      allow delete: if teacherForClass(resource.data.classNo);
+    }
+
+    match /course/{courseId} {
+      allow read: if signedIn();
+      allow create: if teacherForClass(request.resource.data.classNo);
+      allow update: if teacherForClass(resource.data.classNo)
+                    && request.resource.data.classNo == resource.data.classNo;
+      allow delete: if teacherForClass(resource.data.classNo);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
