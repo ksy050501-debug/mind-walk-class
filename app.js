@@ -126,4 +126,20 @@ render=function(){renderCampaign();$('#addBtn').classList.toggle('hide',!(teache
 const backToLoginCampaign=$('#backToLogin').onclick;
 $('#backToLogin').onclick=async()=>{experienceModeActive=false;await backToLoginCampaign()};
 
+// A teacher can unlock one missed lesson on the student's own signed-in device.
+document.body.insertAdjacentHTML('beforeend',`<div class="modal hide" id="pastJournalChoice"><div class="dialog" style="width:min(500px,100%)"><div class="eyebrow">TEACHER APPROVAL</div><h2>과거 성찰일지 적기</h2><p>학생이 놓친 회차를 선택한 뒤 담당 교사가 비밀번호로 승인해 주세요.</p><label for="pastJournalSelect">작성할 회차</label><select id="pastJournalSelect"></select><div style="display:flex;gap:8px;margin-top:18px"><button type="button" class="btn secondary" id="closePastJournal">취소</button><button type="button" class="btn" id="approvePastJournal" style="flex:1">교사 비밀번호 입력</button></div></div></div>`);
+$('#adminUnlock').insertAdjacentHTML('afterend','<button class="btn secondary hide" id="pastJournalButton" style="width:100%;margin-top:8px">교사 확인 후 과거 성찰일지 적기</button>');
+let pendingPastJournalIndex=null;
+const normalDateOpen=dateOpen;
+dateOpen=function(i){return Boolean(state.teacherOverrides?.[i])||normalDateOpen(i)};
+function openPastJournalChoice(){const today=todayKey(),missed=lessons.map((lesson,index)=>({lesson,index})).filter(({index})=>!isCompleted(index)&&(state.schedule[index]||'')<today);if(!missed.length)return toast('작성할 수 있는 과거 성찰일지가 없습니다.');$('#pastJournalSelect').innerHTML=missed.map(({lesson,index})=>`<option value="${index}">${index+1}차시 · ${escapeHtml(lesson[0])}</option>`).join('');$('#pastJournalChoice').classList.remove('hide')}
+$('#pastJournalButton').onclick=openPastJournalChoice;
+$('#closePastJournal').onclick=()=>$('#pastJournalChoice').classList.add('hide');
+$('#approvePastJournal').onclick=()=>{pendingPastJournalIndex=Number($('#pastJournalSelect').value);$('#pastJournalChoice').classList.add('hide');showTeacherAuth('pastJournal')};
+const normalAuthenticateTeacher=authenticateTeacher;
+authenticateTeacher=async function(){if(teacherAction!=='pastJournal')return normalAuthenticateTeacher();const classNo=Number($('#teacherClass').value),password=$('#teacherPassword').value,index=pendingPastJournalIndex;if(!password)return toast('교사용 비밀번호를 입력해 주세요.');try{await signInWithEmailAndPassword(teacherAuth,teacherEmail(classNo),password);if(Number(state.classNo)!==classNo){await signOut(teacherAuth);return toast('이 학생의 담당 반 교사만 승인할 수 있습니다.')}if(!Number.isInteger(index)||isCompleted(index))throw new Error('선택한 회차를 확인해 주세요.');state.progress=index;state.steps=0;state.seen=index;state.teacherOverrides[index]=true;walking=false;await saveNow();await signOut(teacherAuth);$('#teacherAuth').classList.add('hide');pendingPastJournalIndex=null;openJournal(index);toast('교사 확인 완료. 과거 성찰일지를 작성해 주세요.')}catch(error){toast(error.message||'교사용 비밀번호가 맞지 않습니다.')}};
+$('#enterTeacher').onclick=authenticateTeacher;
+const renderWithExperience=render;
+render=function(){renderWithExperience();$('#pastJournalButton').classList.toggle('hide',!auth.currentUser||experienceModeActive)};
+
 await signOut(auth).catch(()=>{});await signOut(teacherAuth).catch(()=>{});state=freshState();render();startClock();
