@@ -14,6 +14,14 @@ service cloud.firestore {
       );
     }
 
+    // A student's own device may add or rewrite journals but never remove one.
+    // Removing lessons (기록 초기화) is done with the class teacher's sign-in.
+    function keepsJournals() {
+      return request.resource.data.get('entries', null) == resource.data.get('entries', null)
+        && request.resource.data.get('journalEntries', {}).keys()
+             .hasAll(resource.data.get('journalEntries', {}).keys());
+    }
+
     match /students/{studentUid} {
       allow create: if signedIn()
                     && request.auth.uid == studentUid
@@ -31,7 +39,8 @@ service cloud.firestore {
         (request.auth.uid == studentUid
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.classNo == resource.data.classNo
-          && request.resource.data.studentNo == resource.data.studentNo) ||
+          && request.resource.data.studentNo == resource.data.studentNo
+          && keepsJournals()) ||
         teacherForClass(resource.data.classNo)
       );
 
@@ -51,4 +60,5 @@ service cloud.firestore {
     }
   }
 }
+
 
